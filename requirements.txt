@@ -1,6 +1,5 @@
 streamlit
-numpy
+openai
 yelpapi
 googlemaps
-openai
-pytrends
+python-dotenv

@@ -1,86 +1,101 @@
 import streamlit as st
 import openai
-import random
 import os
 
-# Set OpenAI API key securely (via env variable)
+# 设置 API 密钥（需事先设置环境变量 OPENAI_API_KEY）
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Page setup
-st.set_page_config(layout="wide")
-st.title("Labubu & 麦肯锡餐饮爆品预测模型")
-st.markdown("请输入城市或邮编，并选择时间维度以获取分析结果")
+# 页面配置
+st.set_page_config(page_title="Labubu × 麦肯锡 餐饮爆品预测模型", layout="wide")
+st.title("🍽️ Labubu × 麦肯锡 餐饮爆品预测引擎")
+st.caption("输入城市或菜品名，即可获得爆品预测 + 深度商业模型分析")
 
-# Language toggle
-lang = st.radio("语言 / Language", ["中文", "English"], horizontal=True)
+# 输入区域
+col1, col2 = st.columns(2)
+with col1:
+    location = st.text_input("📍请输入城市名或地区（支持中英文）", placeholder="如 San Francisco / 广州")
+with col2:
+    dish_name = st.text_input("🍜 你想分析的菜品名（可选）", placeholder="如 酸菜鱼 / Hot Pot")
 
-# Location input
-location = st.text_input("请输入城市或邮编：" if lang == "中文" else "Enter a city or postal code:")
+# 语言与时间维度
+col3, col4 = st.columns(2)
+with col3:
+    lang = st.radio("🌐 输出语言", ["中文", "English"], horizontal=True)
+with col4:
+    timeframe = st.radio("📆 时间维度", ["目前", "未来3个月", "未来6个月", "未来1年", "未来3年"], horizontal=True)
 
-# Timeframe button selection
-st.markdown("时间维度选择" if lang == "中文" else "Timeframe Selection")
-timeframe = st.radio(
-    "", 
-    ["目前", "未来3个月", "未来半年", "未来1年", "未来3年", "未来5年", "未来一世纪"],
-    horizontal=True
-)
+# 分析按钮
+analyze_button = st.button("🔍 开始预测/分析")
 
-# Dish input
-dish_name = st.text_input("请输入菜品名（中英文均可）：" if lang == "中文" else "Enter a dish name to analyze:")
-
-# Simulated DoorDash data
-def simulate_doordash_popularity(dish, loc):
-    return {
-        "order_volume": random.randint(100, 800),
-        "avg_rating": round(random.uniform(3.8, 4.9), 1),
-        "platform_trend": "上升" if random.random() > 0.5 else "稳定"
-    }
-
-# GPT-based Business Model Analysis
-def analyze_dish_commercially(dish, loc, timeframe, lang):
-    models = [
-        "T.O.P.V 模型", "3C 战略", "波特五力", "价值链", "AIDMA", "7S 模型", "4P 营销", "MECE 原则",
-        "SWOT", "长尾理论", "二八法则", "STP 分析", "PEST", "6W2H", "FAST", "GROW", "MVP 模型",
-        "P/MF 产品市场契合度", "波士顿矩阵", "蓝海战略"
+# 模拟爆品预测逻辑（简化示例，可扩展为调用 GPT/外部API）
+def predict_hot_dishes(location, timeframe, lang="中文"):
+    dish_list = [
+        "酸菜鱼", "麻辣香锅", "藤椒鸡", "黄焖鸡", "牛油火锅", 
+        "香葱油拌面", "烤冷面", "螺蛳粉", "干锅花菜", "腊味煲仔饭"
     ]
-    prompt_cn = f"""
-请基于以下 20 种商业分析模型：{', '.join(models)}，
-对“{dish}”这道菜在“{loc}”地区“{timeframe}”这个时间维度的爆品潜力进行全面、通俗且结构化的分析，
-结合当地人群口味、经济能力、消费习惯、热度趋势等因素。
-输出语言为中文。
+    if lang == "English":
+        dish_list = [
+            "Sour Fish Soup", "Mala Hot Pot", "Green Pepper Chicken", "Yellow Braised Chicken",
+            "Butter Hot Pot", "Scallion Oil Noodles", "Grilled Cold Noodles",
+            "River Snail Rice Noodles", "Dry Pot Cauliflower", "Cured Meat Claypot Rice"
+        ]
+    return dish_list[:10]
+
+# 分析菜品背后的商业模型
+def analyze_dish_with_models(dish, lang="中文"):
+    if lang == "中文":
+        return f"""
+🔍 **爆品分析报告：《{dish}》**
+
+1. **SWOT分析**：
+- 优势（Strengths）：口味独特，原料成本适中，社交平台传播性强。
+- 劣势（Weaknesses）：标准化难度高，厨房操作复杂。
+- 机会（Opportunities）：符合年轻人猎奇心理，适合短视频宣传。
+- 威胁（Threats）：竞争者模仿速度快，区域接受度不同。
+
+2. **4P营销模型**：
+- 产品（Product）：突出菜品核心特色（如鲜、麻、香）。
+- 价格（Price）：目标定价区间 $13-$18，结合城市消费水平。
+- 渠道（Place）：适合中高端快餐 / 新中式正餐门店。
+- 推广（Promotion）：通过抖音、小红书等平台打造“城市必吃爆款”。
+
+3. **蓝海战略**：
+- 当前地区尚无同类定位精准的爆品，适合率先布局打造差异化竞争力。
+
+📊 **人效T.O.P.V**：高复购率 + 强曝光力 = 人效提升新引擎。
 """
-    prompt_en = f"""
-Using the following 20 business strategy frameworks: {', '.join(models)},
-please analyze the market potential of the dish '{dish}' in '{loc}' during the timeframe '{timeframe}'.
-Your answer should be well-structured, insightful, and easy to understand for restaurant owners.
-Output language: English.
+    else:
+        return f"""
+🔍 **Hot Dish Analysis Report: {dish}**
+
+1. **SWOT**:
+- Strengths: Unique flavor, moderate cost, viral appeal.
+- Weaknesses: Difficult to standardize, complex preparation.
+- Opportunities: Strong appeal to Gen Z, ideal for TikTok marketing.
+- Threats: Fast copycat risk, regional flavor preferences.
+
+2. **4P**:
+- Product: Emphasize spicy/savory flavor profile.
+- Price: Target range $13–$18 based on area income.
+- Place: Best for fast-casual or trendy Asian fusion restaurants.
+- Promotion: Highlight via TikTok, Instagram Reels, Xiaohongshu.
+
+3. **Blue Ocean Strategy**:
+- Few direct competitors offering this niche—opportunity to dominate the segment.
+
+📊 **T.O.P.V**: High repurchase + visibility = performance booster.
 """
-    prompt = prompt_cn if lang == "中文" else prompt_en
 
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.5
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"⚠️ GPT分析失败：{str(e)}"
-
-# Display section
-if dish_name:
-    with st.spinner("正在生成分析报告..." if lang == "中文" else "Generating analysis report..."):
-        result = analyze_dish_commercially(dish_name, location, timeframe, lang)
-        dd_pop = simulate_doordash_popularity(dish_name, location)
-
-        st.subheader("📊 商业模型分析" if lang == "中文" else "📊 Business Model Analysis")
-        st.markdown(result, unsafe_allow_html=True)
-
-        st.subheader("📈 平台热度模拟" if lang == "中文" else "📈 Simulated Platform Popularity")
-        st.markdown(
-            f"""
-- {'月订单量' if lang == "中文" else 'Monthly Orders'}: {dd_pop['order_volume']}
-- {'平均评分' if lang == "中文" else 'Avg Rating'}: {dd_pop['avg_rating']}
-- {'趋势' if lang == "中文" else 'Trend'}: {dd_pop['platform_trend']}
-"""
-        )
+# 主逻辑执行
+if analyze_button:
+    if dish_name:
+        st.subheader("📊 爆品商业模型分析")
+        st.markdown(analyze_dish_with_models(dish_name, lang))
+    elif location:
+        st.subheader("📈 爆品预测结果")
+        result = predict_hot_dishes(location, timeframe, lang)
+        for idx, item in enumerate(result, 1):
+            with st.expander(f"{idx}. {item}"):
+                st.markdown(analyze_dish_with_models(item, lang))
+    else:
+        st.warning("⚠️ 请至少输入一个城市或菜品名以开始分析。")

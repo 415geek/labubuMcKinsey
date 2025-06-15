@@ -78,12 +78,20 @@ def fetch_yelp(location, openai_client=None):
         st.error(f"❌ Yelp API 请求失败：{e}")
         return []
 def fetch_google_reviews(name, loc):
-    reviews = []
-    resp = gmaps.places(query=f"{name} in {loc}", type="restaurant")
-    for r in resp.get('results', [])[:3]:
-        det = gmaps.place(place_id=r['place_id'], fields=['reviews'])
-        reviews += [rev['text'] for rev in det.get('result', {}).get('reviews', [])]
-    return reviews
+    try:
+        query = f"{name} in {loc}"
+        st.write(f"🔍 Google 查询: {query}")
+        resp = gmaps.places(query=query, type="restaurant")
+        if resp['status'] != 'OK':
+            st.warning(f"⚠️ Google Places 查询失败: {resp['status']} - {resp.get('error_message', '')}")
+            return []
+        place_id = resp['results'][0]['place_id']
+        details = gmaps.place(place_id=place_id, fields=['review'])
+        reviews = details['result'].get('reviews', [])
+        return [r['text'] for r in reviews]
+    except Exception as e:
+        st.error(f"❌ Google API 错误: {e}")
+        return []
 
 def fetch_trend_score(term, geo="US"):
     py = TrendReq()

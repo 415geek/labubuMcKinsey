@@ -1,0 +1,6 @@
+streamlit
+numpy
+yelpapi
+googlemaps
+openai
+pytrends

@@ -1,4 +1,3 @@
-# app.py
 import os
 import streamlit as st
 import numpy as np
@@ -6,13 +5,47 @@ from yelpapi import YelpAPI
 import googlemaps
 from openai import OpenAI
 from pytrends.request import TrendReq
+import re
 
-# ——— API 客户端加载
+# ---------------------------- 中英文地名支持 ----------------------------
+CITY_MAP = {
+    "旧金山": "San Francisco",
+    "湾区": "San Francisco Bay Area",
+    "洛杉矶": "Los Angeles",
+    "纽约": "New York",
+    "芝加哥": "Chicago",
+    "西雅图": "Seattle",
+    "波士顿": "Boston",
+    "圣地亚哥": "San Diego",
+    "圣何塞": "San Jose",
+    "奥克兰": "Oakland",
+    "加州": "California",
+}
+
+def is_chinese(text):
+    return bool(re.search(r'[\u4e00-\u9fff]', text))
+
+def normalize_location(user_input, openai_client=None):
+    user_input = user_input.strip()
+    if user_input in CITY_MAP:
+        return CITY_MAP[user_input]
+    if is_chinese(user_input) and openai_client:
+        try:
+            prompt = f"请将以下中文城市名称翻译为英文用于地图搜索：{user_input}"
+            resp = openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role":"user","content":prompt}],
+                temperature=0,
+                max_tokens=20
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            st.warning(f"翻译失败，使用原始输入：{e}")
+    return user_input
+
+# ---------------------------- API 初始化 ----------------------------
 def load_clients():
-    yk, gk, ok = os.getenv("YELP_API_KEY"), os.getenv("GOOGLE_API_KEY"), os.getenv("OPENAI_API_KEY")
-    if not (yk and gk and ok):
-        st.error("请设置 YELP_API_KEY、GOOGLE_API_KEY、OPENAI_API_KEY")
-        st.stop()
+    yk, gk, ok = st.secrets["YELP_API_KEY"], st.secrets["GOOGLE_API_KEY"], st.secrets["OPENAI_API_KEY"]
     yelp = YelpAPI(yk)
     gmaps = googlemaps.Client(key=gk)
     client = OpenAI(api_key=ok)
@@ -20,7 +53,7 @@ def load_clients():
 
 yelp_api, gmaps, openai_client = load_clients()
 
-# ——— 情感分析函数，使用 OpenAI client.chat.completions
+# ---------------------------- 核心函数 ----------------------------
 def analyze_sentiment_with_gpt(texts):
     prompt = "请将下面每条评论按正面(+1)、中性(0)、负面(-1)分类，并输出平均值：\n"
     for t in texts:
@@ -35,8 +68,9 @@ def analyze_sentiment_with_gpt(texts):
     except:
         return 0.0
 
-def fetch_yelp(location):
-    return yelp_api.search_query(term="restaurants", location=location, limit=20).get('businesses', [])
+def fetch_yelp(location, openai_client=None):
+    normalized_location = normalize_location(location, openai_client)
+    return yelp_api.search_query(term="restaurants", location=normalized_location, limit=20).get('businesses', [])
 
 def fetch_google_reviews(name, loc):
     reviews = []
@@ -92,7 +126,7 @@ def pest():
         "Technology": "外卖与智能餐饮加速"
     }
 
-# ——— Streamlit 界面
+# ---------------------------- Streamlit 页面 ----------------------------
 st.title("labubu & 麦肯锡 餐饮爆品预测模型")
 loc = st.text_input("请输入城市或邮编")
 timeframe = st.selectbox("时间维度", ["目前","未来3月","半年","1年","3年","5年","100年"])
@@ -100,7 +134,7 @@ if st.button("预测爆品"):
     if not loc:
         st.error("请填写地区")
     else:
-        data = fetch_yelp(loc)
+        data = fetch_yelp(loc, openai_client=openai_client)
         reviews = [fetch_google_reviews(b['name'], loc) for b in data]
         top = predict_hot_dishes(data, reviews, loc)
         econ = fetch_regional_econ(loc)

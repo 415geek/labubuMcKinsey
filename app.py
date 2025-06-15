@@ -70,8 +70,13 @@ def analyze_sentiment_with_gpt(texts):
 
 def fetch_yelp(location, openai_client=None):
     normalized_location = normalize_location(location, openai_client)
-    return yelp_api.search_query(term="restaurants", location=normalized_location, limit=20).get('businesses', [])
-
+    st.info(f"📍 使用的地名: {normalized_location}")
+    try:
+        result = yelp_api.search_query(term="restaurants", location=normalized_location, limit=10)
+        return result.get('businesses', [])
+    except Exception as e:
+        st.error(f"❌ Yelp API 请求失败：{e}")
+        return []
 def fetch_google_reviews(name, loc):
     reviews = []
     resp = gmaps.places(query=f"{name} in {loc}", type="restaurant")

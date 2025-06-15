@@ -1,169 +1,86 @@
-import os
 import streamlit as st
-import numpy as np
-from yelpapi import YelpAPI
-import googlemaps
-from openai import OpenAI
-from pytrends.request import TrendReq
-import re
+import openai
+import random
+import os
 
-# ---------------------------- 中英文地名支持 ----------------------------
-CITY_MAP = {
-    "旧金山": "San Francisco",
-    "湾区": "San Francisco Bay Area",
-    "洛杉矶": "Los Angeles",
-    "纽约": "New York",
-    "芝加哥": "Chicago",
-    "西雅图": "Seattle",
-    "波士顿": "Boston",
-    "圣地亚哥": "San Diego",
-    "圣何塞": "San Jose",
-    "奥克兰": "Oakland",
-    "加州": "California",
-}
+# Set OpenAI API key securely (via env variable)
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def is_chinese(text):
-    return bool(re.search(r'[\u4e00-\u9fff]', text))
+# Page setup
+st.set_page_config(layout="wide")
+st.title("Labubu & 麦肯锡餐饮爆品预测模型")
+st.markdown("请输入城市或邮编，并选择时间维度以获取分析结果")
 
-def normalize_location(user_input, openai_client=None):
-    user_input = user_input.strip()
-    if user_input in CITY_MAP:
-        return CITY_MAP[user_input]
-    if is_chinese(user_input) and openai_client:
-        try:
-            prompt = f"请将以下中文城市名称翻译为英文用于地图搜索：{user_input}"
-            resp = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role":"user","content":prompt}],
-                temperature=0,
-                max_tokens=20
-            )
-            return resp.choices[0].message.content.strip()
-        except Exception as e:
-            st.warning(f"翻译失败，使用原始输入：{e}")
-    return user_input
+# Language toggle
+lang = st.radio("语言 / Language", ["中文", "English"], horizontal=True)
 
-# ---------------------------- API 初始化 ----------------------------
-def load_clients():
-    yk, gk, ok = st.secrets["YELP_API_KEY"], st.secrets["GOOGLE_API_KEY"], st.secrets["OPENAI_API_KEY"]
-    yelp = YelpAPI(yk)
-    gmaps = googlemaps.Client(key=gk)
-    client = OpenAI(api_key=ok)
-    return yelp, gmaps, client
+# Location input
+location = st.text_input("请输入城市或邮编：" if lang == "中文" else "Enter a city or postal code:")
 
-yelp_api, gmaps, openai_client = load_clients()
+# Timeframe button selection
+st.markdown("时间维度选择" if lang == "中文" else "Timeframe Selection")
+timeframe = st.radio(
+    "", 
+    ["目前", "未来3个月", "未来半年", "未来1年", "未来3年", "未来5年", "未来一世纪"],
+    horizontal=True
+)
 
-# ---------------------------- 核心函数 ----------------------------
-def analyze_sentiment_with_gpt(texts):
-    prompt = "请将下面每条评论按正面(+1)、中性(0)、负面(-1)分类，并输出平均值：\n"
-    for t in texts:
-        prompt += f"- {t}\n"
-    resp = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0
-    )
+# Dish input
+dish_name = st.text_input("请输入菜品名（中英文均可）：" if lang == "中文" else "Enter a dish name to analyze:")
+
+# Simulated DoorDash data
+def simulate_doordash_popularity(dish, loc):
+    return {
+        "order_volume": random.randint(100, 800),
+        "avg_rating": round(random.uniform(3.8, 4.9), 1),
+        "platform_trend": "上升" if random.random() > 0.5 else "稳定"
+    }
+
+# GPT-based Business Model Analysis
+def analyze_dish_commercially(dish, loc, timeframe, lang):
+    models = [
+        "T.O.P.V 模型", "3C 战略", "波特五力", "价值链", "AIDMA", "7S 模型", "4P 营销", "MECE 原则",
+        "SWOT", "长尾理论", "二八法则", "STP 分析", "PEST", "6W2H", "FAST", "GROW", "MVP 模型",
+        "P/MF 产品市场契合度", "波士顿矩阵", "蓝海战略"
+    ]
+    prompt_cn = f"""
+请基于以下 20 种商业分析模型：{', '.join(models)}，
+对“{dish}”这道菜在“{loc}”地区“{timeframe}”这个时间维度的爆品潜力进行全面、通俗且结构化的分析，
+结合当地人群口味、经济能力、消费习惯、热度趋势等因素。
+输出语言为中文。
+"""
+    prompt_en = f"""
+Using the following 20 business strategy frameworks: {', '.join(models)},
+please analyze the market potential of the dish '{dish}' in '{loc}' during the timeframe '{timeframe}'.
+Your answer should be well-structured, insightful, and easy to understand for restaurant owners.
+Output language: English.
+"""
+    prompt = prompt_cn if lang == "中文" else prompt_en
+
     try:
-        return float(resp.choices[0].message.content.strip())
-    except:
-        return 0.0
-
-def fetch_yelp(location, openai_client=None):
-    normalized_location = normalize_location(location, openai_client)
-    st.info(f"📍 使用的地名: {normalized_location}")
-    try:
-        result = yelp_api.search_query(term="restaurants", location=normalized_location, limit=10)
-        return result.get('businesses', [])
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5
+        )
+        return response.choices[0].message.content
     except Exception as e:
-        st.error(f"❌ Yelp API 请求失败：{e}")
-        return []
-def fetch_google_reviews(name, loc):
-    try:
-        query = f"{name} in {loc}"
-        st.write(f"🔍 Google 查询: {query}")
-        resp = gmaps.places(query=query, type="restaurant")
-        if resp['status'] != 'OK':
-            st.warning(f"⚠️ Google Places 查询失败: {resp['status']} - {resp.get('error_message', '')}")
-            return []
-        place_id = resp['results'][0]['place_id']
-        details = gmaps.place(place_id=place_id, fields=['review'])
-        reviews = details['result'].get('reviews', [])
-        return [r['text'] for r in reviews]
-    except Exception as e:
-        st.error(f"❌ Google API 错误: {e}")
-        return []
+        return f"⚠️ GPT分析失败：{str(e)}"
 
-def fetch_trend_score(term, geo="US"):
-    py = TrendReq()
-    py.build_payload([term], geo=geo, timeframe='today 12-m')
-    df = py.interest_over_time()
-    return float(df[term].mean()) if not df.empty else 0.0
+# Display section
+if dish_name:
+    with st.spinner("正在生成分析报告..." if lang == "中文" else "Generating analysis report..."):
+        result = analyze_dish_commercially(dish_name, location, timeframe, lang)
+        dd_pop = simulate_doordash_popularity(dish_name, location)
 
-def fetch_regional_econ(loc):
-    return {"income": 80000, "population": 500000}
+        st.subheader("📊 商业模型分析" if lang == "中文" else "📊 Business Model Analysis")
+        st.markdown(result, unsafe_allow_html=True)
 
-def predict_hot_dishes(businesses, reviews_list, loc):
-    econ = fetch_regional_econ(loc)
-    candidates = ["麻辣烫","云吞面","冰粉"]
-    results = []
-    for texts in reviews_list:
-        senti = analyze_sentiment_with_gpt(texts)
-        for dish in candidates:
-            trend = fetch_trend_score(dish[:4], geo=loc[:2].upper())
-            score = 0.4*senti + 0.3*trend + 0.2*(econ["income"]/1e5) + 0.1*min(len(texts)/100,1)
-            results.append((dish, round(score,3), round(senti,2), round(trend,2)))
-    unique = {d[0]: d for d in results}
-    return sorted(unique.values(), key=lambda x: x[1], reverse=True)[:3]
-
-def swot(dish, senti, trend, econ):
-    return {
-        "Strengths": f"情感分 {senti:.2f}，趋势热度 {trend:.1f}",
-        "Weaknesses": "供应链稳定性需评估",
-        "Opportunities": f"地区人均收入 {econ['income']} 带来消费潜力",
-        "Threats": "竞品可能跟进加速"
-    }
-
-def four_p(dish):
-    return {
-        "Product": f"{dish} 本地现制现卖 + 口味适应",
-        "Price": "中端定价 + 外卖套餐优惠",
-        "Place": "堂食+外卖双渠道",
-        "Promotion": "社交媒体+网红带动"
-    }
-
-def pest():
-    return {
-        "Politics": "食品安全监管严格",
-        "Economy": "消费回暖",
-        "Social": "健康解暑趋势",
-        "Technology": "外卖与智能餐饮加速"
-    }
-
-# ---------------------------- Streamlit 页面 ----------------------------
-st.title("labubu & 麦肯锡 餐饮爆品预测模型")
-loc = st.text_input("请输入城市或邮编")
-timeframe = st.selectbox("时间维度", ["目前","未来3月","半年","1年","3年","5年","100年"])
-if st.button("预测爆品"):
-    if not loc:
-        st.error("请填写地区")
-    else:
-        data = fetch_yelp(loc, openai_client=openai_client)
-        reviews = [fetch_google_reviews(b['name'], loc) for b in data]
-        top = predict_hot_dishes(data, reviews, loc)
-        econ = fetch_regional_econ(loc)
-        st.markdown("### 🔥 爆品建议 Top3")
-        for dish, score, senti, trend in top:
-            if st.button(dish):
-                st.subheader(f"{dish} 深度分析")
-                st.write(f"📈 综合评分：{score}")
-                st.write("#### SWOT 分析")
-                for k,v in swot(dish,senti,trend,econ).items():
-                    st.write(f"- **{k}**：{v}")
-                st.write("#### 4P 策略")
-                for k,v in four_p(dish).items():
-                    st.write(f"- **{k}**：{v}")
-                st.write("#### PEST 分析")
-                for k,v in pest().items():
-                    st.write(f"- **{k}**：{v}")
-                st.write(f"💬 GPT 平均情感分：{senti:.2f}")
-                st.write(f"🔍 Google 趋势得分：{trend:.1f}")
+        st.subheader("📈 平台热度模拟" if lang == "中文" else "📈 Simulated Platform Popularity")
+        st.markdown(
+            f"""
+- {'月订单量' if lang == "中文" else 'Monthly Orders'}: {dd_pop['order_volume']}
+- {'平均评分' if lang == "中文" else 'Avg Rating'}: {dd_pop['avg_rating']}
+- {'趋势' if lang == "中文" else 'Trend'}: {dd_pop['platform_trend']}
+"""
+        )
